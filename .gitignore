@@ -1,0 +1,19 @@
+# Local Python environments
+machine_learning/
+.venv/
+venv/
+env/
+
+# Python cache and tooling files
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Jupyter temporary files
+.ipynb_checkpoints/
+
+# Operating-system files
+.DS_Store
+Thumbs.db
