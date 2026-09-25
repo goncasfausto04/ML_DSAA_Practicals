@@ -1,0 +1,128 @@
+{
+  "dataset": "champions",
+  "steps": [
+    {
+      "column": "6 boolean columns",
+      "action": "'FASE', 'FALSE' and 'TRUE' to real booleans",
+      "reason": "one misspelling and one casing convention would otherwise leave 'Mental preparation' a three-category column",
+      "rows_affected": 23,
+      "carries": {
+        "cast": {
+          "Mental preparation": "boolean",
+          "Disability": "boolean",
+          "Late enrollment": "boolean",
+          "Outdoor Workout": "boolean",
+          "No coach": "boolean",
+          "Past injuries": "boolean"
+        },
+        "replace": {
+          "FASE": false,
+          "FALSE": false,
+          "TRUE": true
+        }
+      }
+    },
+    {
+      "column": "Physiotherapy, Athlete score, Age group",
+      "action": "invalid values -> NaN ('blank the cell')",
+      "reason": "a duration and a 0-140 score cannot be negative, and '0' is not one of Age group's three bands; 499 of the 505 negatives are exactly -30, concentrated in 3 of 7 competitions, an administrative placeholder rather than missing at random; blanking tied with clipping and with flagging, and beat dropping the row by +0.0109 F1",
+      "rows_affected": 513,
+      "carries": {
+        "treatment": "blank",
+        "becomes": null,
+        "columns": [
+          "Physiotherapy",
+          "Athlete score",
+          "Age group"
+        ]
+      }
+    },
+    {
+      "column": "Athlete Id",
+      "action": "keep each athlete's earliest RecordID",
+      "reason": "there are no duplicate ROWS; the repetition is one athlete across several competitions, and an athlete on both sides of a split hands the model the answer; no tie-break scored better than any other, so this one is recorded for reproducibility rather than for accuracy",
+      "rows_affected": 280,
+      "carries": {
+        "key": "Athlete Id",
+        "keep": "earliest RecordID"
+      }
+    },
+    {
+      "column": "26 columns",
+      "action": "missing values LEFT OPEN; the 'median / mode' plan goes to later weeks",
+      "reason": "a median or a mode computed here would be computed over the rows each later week holds out to score on, so the file would carry a value derived from its own test set; the plan won the comparison above and each week applies it inside its own split",
+      "rows_affected": 1014,
+      "carries": {
+        "applied": false,
+        "fill": {
+          "numeric": "median",
+          "categorical": "mode"
+        },
+        "numeric": [
+          "Edition",
+          "Previous attempts",
+          "Athlete score",
+          "Train bf competition",
+          "Strength training",
+          "Sand training",
+          "Recovery",
+          "Supplements",
+          "Cardiovascular training",
+          "Squad training",
+          "Physiotherapy",
+          "Plyometric training",
+          "Sport-specific training",
+          "Other training"
+        ],
+        "categorical": [
+          "Competition",
+          "Sex",
+          "Region",
+          "Education",
+          "Age group",
+          "Income",
+          "Disability",
+          "Late enrollment",
+          "Mental preparation",
+          "Outdoor Workout",
+          "No coach",
+          "Past injuries"
+        ]
+      }
+    },
+    {
+      "column": "11 training-volume columns",
+      "action": "log1p, and log1p on nothing else",
+      "reason": "measured over 20 paired splits on identical held-out rows: F1 0.8506 against 0.8182 untouched, a paired +0.0325 +/- 0.0030, better on 20 of 20; these columns are right-skewed by factors of 1.57 to 3.06, and log1p is stateless, so there is nothing to fit and therefore nothing to leak",
+      "rows_affected": 11,
+      "carries": {
+        "applied": false,
+        "transform": "log1p",
+        "columns": [
+          "Train bf competition",
+          "Strength training",
+          "Sand training",
+          "Recovery",
+          "Supplements",
+          "Cardiovascular training",
+          "Squad training",
+          "Physiotherapy",
+          "Plyometric training",
+          "Sport-specific training",
+          "Other training"
+        ]
+      }
+    },
+    {
+      "column": "14 numeric columns",
+      "action": "NO outlier treatment",
+      "reason": "five rules were compared and none earned its place; dropping rows by the 1.5*IQR rule removes 67.33% of the file and moves the win rate from 0.6040 to 0.3933, because the rows it deletes win at 0.7063, so it preferentially deletes the signal; on identical held-out rows it scores +0.0022 +/- 0.0045 against keeping everything, half a standard error, so the score does not separate them and the row count and the class rate decide",
+      "rows_affected": 0,
+      "carries": {
+        "applied": false,
+        "outliers": "keep",
+        "rule_tested": "IQR k=1.5"
+      }
+    }
+  ]
+}
