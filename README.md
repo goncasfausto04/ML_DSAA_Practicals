@@ -13,8 +13,8 @@ corresponding practical class.
 | Week 2 | The machine-learning process | [Open](notebooks/week_02/week_02_ml_pipeline.ipynb) | [Open](solutions/week_02/week_02_ml_pipeline_solution.ipynb) |
 | Week 3 | Deepening exploration: quality, missing values and outliers | [Open](notebooks/week_03/week_03_deepen_exploration.ipynb) | [Open](solutions/week_03/week_03_deepen_exploration_solution.ipynb) |
 | Week 3 | Deepening exploration: a price, not a class | [Open](notebooks/week_03/week_03_deepen_exploration_regression.ipynb) | [Open](solutions/week_03/week_03_deepen_exploration_regression_solution.ipynb) |
-| Week 4 | Feature work and dimensionality reduction before selection | [Open](notebooks/week_04/week_04_feature_work_classification.ipynb) | Not yet released |
-| Week 4 | Feature work on a regression target | [Open](notebooks/week_04/week_04_feature_work_regression.ipynb) | Not yet released |
+| Week 4 | Feature work and dimensionality reduction before selection | [Open](notebooks/week_04/week_04_feature_work_classification.ipynb) | [Open](solutions/week_04/week_04_feature_work_classification_solution.ipynb) |
+| Week 4 | Feature work on a regression target | [Open](notebooks/week_04/week_04_feature_work_regression.ipynb) | [Open](solutions/week_04/week_04_feature_work_regression_solution.ipynb) |
 | Week 5 | Performance measures | [Open](notebooks/week_05/week_05_performance_measures.ipynb) | Not yet released |
 | Week 5 | Model selection | [Open](notebooks/week_05/week_05_model_selection.ipynb) | Not yet released |
 | Week 6 | Linear and logistic models | [Open](notebooks/week_06/week_06_linear_logistic.ipynb) | Not yet released |
