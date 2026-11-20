@@ -1,126 +1,105 @@
-# Machine Learning — Week 5: Model Selection and Performance Measures
+# Week 5 — Choosing Models Fairly and Measuring Performance
 
-Sources: [Model selection solution](../solutions/week_05/week_05_model_selection_solution.ipynb) · [Performance measures solution](../solutions/week_05/week_05_performance_measures_solution.ipynb).
+Sources: [model selection solution](../solutions/week_05/week_05_model_selection_solution.ipynb) · [performance measures solution](../solutions/week_05/week_05_performance_measures_solution.ipynb)
 
-## Key learning points
+## The big idea
 
-1. **Selection and assessment need separate data.** The score used to choose a model, setting, or threshold is optimistic in expectation as an estimate of the winner's future performance.
-2. **Choose the splitter from the prediction problem.** New random cases, unseen groups, and future observations require different validation designs.
-3. **Fit the complete pipeline inside every training fold**, including imputation, encoding, scaling, and feature selection.
-4. **Choose metrics before seeing scores**, based on the consequences of errors. Different metrics can prefer different models.
-5. **A threshold is another choice to validate.** Changing it changes labels and metrics without retraining the model.
+Two jobs must use **different data**:
 
-## Notebook 1 — Model selection
+- **Selecting** (choosing a model, a setting, a threshold)
+- **Estimating** (saying how good the chosen thing really is)
 
-### Train, validation, and test
+The score you used to pick the winner is **too optimistic**, because you picked whatever happened to do best on those rows, luck included. That's why we have test sets and nested cross-validation.
 
-- **Training:** fit preprocessing and model parameters.
-- **Validation:** choose model family and hyperparameters.
-- **Test:** independently assess the final choice; do not use it to tune.
+---
 
-The notebook reserves 20% for testing, then takes 25% of the remaining 80% for validation: **60% train / 20% validation / 20% test**. Classification splits are stratified.
+## Part 1 — Model selection
 
-After selecting a configuration, **refit the whole pipeline on train + validation**, then assess it on the test set. The notebook displays test scores repeatedly for teaching; using those scores to make further choices would compromise their independence.
+### Cross-validation (CV)
 
-### Cross-validation: choose the right design
+One single train/validation split is a sample of size one: you might just get a lucky or unlucky split. **K-fold CV** cuts the training data into K pieces, trains on K−1 and validates on the remaining one, rotates K times and averages. Every row gets used for validation exactly once.
 
-| Design | How it works | Main lesson |
-|---|---|---|
-| Holdout | One training/validation split | Cheap, but depends heavily on one partition |
-| K-Fold | Train on K−1 folds and validate on the remaining fold; rotate | Uses every row for validation once |
-| Stratified K-Fold | K-Fold preserving class proportions | Useful for classification, especially imbalanced classes |
-| Repeated K-Fold | Redraw folds and repeat CV | Shows sensitivity to partitions; costs more fits |
-| Leave-One-Out | One validation row per fit | Expensive; pool held-out predictions for F1 rather than average one-row F1 scores |
-| GroupKFold | Keep each group entirely on one side of a split | Estimates performance on unseen groups |
-| TimeSeriesSplit | Train on earlier observations, validate on later ones | Matches prediction into the future; preserve chronological order |
+| Variant | When to use it |
+|---|---|
+| **Stratified K-fold** | Classification: keeps class proportions in every fold |
+| **Repeated K-fold** | Run K-fold several times with different cuts to see how much scores vary |
+| **Leave-one-out** | K = number of rows. Very expensive |
+| **GroupKFold** | Rows come in groups (same person, same competition). A whole group stays on one side, so you test on **unseen groups** |
+| **TimeSeriesSplit** | Time matters. Always train on the past and validate on the future |
 
-The notebook groups by competition level and orders time splits by `Edition`. Athlete IDs have already been deduplicated, so they do not define repeated groups here.
+**The split is a modelling assumption.** Pick it based on how the model will be used in real life ("new athletes?", "new competitions?", "next year?"), **not** based on which one gives the best score.
 
-**Do not choose a splitter because it gives the highest score.** Unseen competition levels are a harder, different question from new athletes in familiar levels. A random test split cannot fairly judge an estimate for a different deployment setting.
+### Everything goes inside the folds
 
-### Compare and tune fairly
+Imputation, encoding, scaling and feature selection must all be **refitted inside each training fold**. A `Pipeline` does this automatically. If anything is fitted outside the folds, it has already seen the validation rows, which is leakage.
 
-- **Parameters** are learned during fitting; **hyperparameters** are chosen settings such as tree depth or logistic regression `C`.
-- Compare candidates using the **same folds and metric**. A large training–validation gap suggests overfitting; poor scores on both suggest underfitting.
-- **GridSearchCV** tries every supplied configuration. A `Pipeline` ensures preprocessing is refitted within each fold; step parameters use names such as `classifier__C`.
-- `best_score_` is the winning mean CV score used for selection. With refitting enabled, `best_estimator_` is fitted on all data passed to the search.
-- Caching identical preprocessing **within each fold** avoids redundant fits. Never reuse preprocessing fitted across validation boundaries. Standard and cached searches should agree when their computation is equivalent.
-- Optional alternatives: randomized search samples configurations; successive halving removes weak candidates early.
+### Tuning hyperparameters: grid search
 
-### Nested cross-validation
+**Grid search** tries every combination of the settings you list, scores each with CV, and keeps the best. At the end it **refits the winner on all training data**, so the search hands you a finished model ready to use.
 
-**Outer training fold → inner CV selects settings → refit winner on outer training rows → score once on outer held-out rows.** Repeat across outer folds.
+### Nested cross-validation (the gold standard)
 
-The inner loop **selects**; the outer loop **assesses the entire selection procedure**. After assessment, run the search on all development data to obtain the final fitted model.
+Problem: the best grid-search score is optimistic (it's the best of many tries). Solution:
 
-Nested CV reduces selection optimism, but its score need not be lower than ordinary CV on every run. Report variation as well as the mean: small score differences within the fold spread do not establish a clear winner. Changing validation design alone does not change a fixed model refitted on the same rows.
+- **Outer loop:** splits the data into folds for *estimating*.
+- **Inner loop:** inside each outer training part, runs the whole grid search to *choose* settings.
+- The chosen model is then scored on the outer fold it never saw.
 
-## Notebook 2 — Performance measures
+The inner loop **chooses**; the outer loop **grades the whole choosing procedure**. Nested CV doesn't give you a model. It gives you an honest score for "running this search". To get the final model you run the search once more on all training data.
 
-### Regression: know the errors and their units
+---
 
-Let `e = y − ŷ`, `n` be the number of observations, and `p` the number of predictors.
+## Part 2 — Performance measures
 
-| Metric | Formula | Interpretation / limitation |
-|---|---|---|
-| R² | `1 − Σe² / Σ(y − mean(y))²` | Higher is better; 1 is perfect, 0 matches predicting the evaluation-set mean, negative is worse; assumes a nonconstant target |
-| Adjusted R² | `1 − (1 − R²)(n − 1)/(n − p − 1)` | Penalizes predictor count in linear regression; requires `n > p + 1`; does not replace held-out evaluation |
-| MAE | `mean(abs(e))` | Average miss in target units; easy to interpret |
-| MSE | `mean(e²)` | Strongly penalizes large misses; squared target units |
-| RMSE | `sqrt(mean(e²))` | Also emphasizes large misses, in target units |
-| MedAE | `median(abs(e))` | Typical absolute miss; robust but can hide severe tail errors |
-| MAPE | `mean(abs(e / y))` | Relative error; unstable near zero and unsuitable when targets can be zero |
+**Choose the metric before seeing results**, based on which mistakes cost more.
 
-All error metrics above are **lower is better**. scikit-learn returns MAPE as a fraction: `0.10` means 10%.
+### Regression metrics (lower is better, except R²)
 
-For car prices, MAE and RMSE are in euros. RMSE penalizes a few huge pricing mistakes more strongly, so it can rank models differently from MAE. A high R² does not guarantee small euro errors or good performance for every price range.
+| Metric | Plain meaning |
+|---|---|
+| **MAE** | Average size of the miss, in real units (euros). Easiest to explain |
+| **RMSE** | Like MAE but **big misses count much more** (errors are squared first) |
+| **MedAE** | The typical miss; ignores the rare huge ones |
+| **MAPE** | Average miss as a percentage; breaks when true values are near zero |
+| **R²** | Share of variation explained. 1 = perfect, 0 = no better than predicting the average |
 
-### Binary classification: define the positive class
+MAE and RMSE can rank models differently: one model might have small usual errors but a few disasters, which RMSE punishes.
 
-For the athletes, `Outcome = 1` means a win. **TP** is a correctly predicted win, **FP** a predicted win that was a loss, **FN** a missed win, and **TN** a correctly predicted loss.
+### Classification metrics
 
-| Metric | Formula | Question |
-|---|---|---|
-| Accuracy | `(TP + TN) / N` | What fraction of all predictions are correct? |
-| Precision (`P`) | `TP / (TP + FP)` | Of predicted positives, how many are correct? |
-| Recall (`R`, sensitivity/TPR) | `TP / (TP + FN)` | Of actual positives, how many are found? |
-| F1 | `2PR / (P + R)` | How well are precision and recall balanced? |
-| F-beta | `(1 + β²)PR / (β²P + R)` | How well are they balanced with a chosen emphasis? |
+- **Accuracy**: share of all predictions that are correct.
+- **Precision**: when I say YES, how often am I right?
+- **Recall**: of the real YES cases, how many did I catch?
+- **F1**: a balance of precision and recall.
+- **F-beta**: like F1 but you choose the emphasis. β > 1 cares more about recall, β < 1 cares more about precision.
 
-`β > 1` emphasizes recall; `β < 1` emphasizes precision. These formulas need a convention when denominators are zero.
+**F1 trap:** F1 ignores true negatives. Here 60% of athletes win, so "predict WIN for everyone" already gets F1 ≈ 0.75. Always compare against that floor. That's why the course reports **F1, ROC-AUC and balanced accuracy** together.
 
-**F1 ignores TN.** When positives are common, always predicting positive can already achieve high F1. If the positive share is `q`, this baseline has precision `q`, recall `1`, and F1 `2q/(1+q)`. Always report a relevant baseline.
+### Thresholds
 
-### Probabilities, thresholds, and curves
+A classifier really outputs a **probability**. The **threshold** (default 0.5) turns it into YES/NO.
+- Lower threshold → more YES → higher recall, more false alarms.
+- Higher threshold → fewer YES → higher precision, more misses.
 
-Predict positive when the positive-class score reaches a threshold. Lowering the threshold flags more cases and cannot reduce recall on fixed data; precision can fluctuate. Raising it generally favors fewer false alarms at the expense of missed positives.
+The model doesn't change at all, only where you cut. The threshold is a choice too, so pick it on validation data.
 
-| Tool | What it shows | What to remember |
-|---|---|---|
-| ROC curve | TPR (recall) against `FPR = FP/(FP + TN)` across thresholds | Summarizes ranking across both classes; can look favorable despite poor precision for rare positives |
-| ROC AUC | Area under ROC | Higher is better; random ranking is about 0.5; use scores/probabilities rather than hard labels |
-| Precision–recall curve | Precision against recall across thresholds | Focuses on positives; random-ranking baseline is their prevalence |
-| Youden's J | `TPR − FPR` | ROC-based threshold criterion; need not maximize F1 or minimize business costs |
-| Maximum F1 | Threshold with highest validation F1 | A different objective can choose a different threshold |
+### ROC and precision-recall curves
 
-Report the chosen threshold **together with its metrics**. Choose it on validation data and evaluate it on independent data. AUC measures ranking, not probability calibration or performance at a particular operating threshold.
+- **ROC curve:** catch rate vs false-alarm rate across all thresholds. **AUC** = area under it. 0.5 means random guessing and 1 means perfect **ranking**. It measures how well the model *orders* cases, not whether its probabilities are accurate.
+- **Precision-recall curve:** focuses on the positive class. More informative when positives are rare.
 
-### Optional: multiclass averages
+### More than two classes (optional)
 
-Start with the **confusion matrix** (actual classes in rows, predictions in columns), then inspect per-class metrics.
-
-- **Macro:** average class scores equally; highlights performance on rare classes.
-- **Weighted:** average class scores by true class frequency; can hide failures on rare classes.
-- **Micro:** pool TP/FP/FN before scoring. For single-label classification covering all classes, micro precision = micro recall = micro F1 = accuracy.
-
-Use `classification_report` for per-class and aggregate scores. Choose averaging based on class importance, rather than whichever average looks best.
+Compute the metric per class, then average:
+- **Macro:** every class counts equally, so rare classes matter.
+- **Weighted:** big classes count more, which can hide failure on rare classes.
+- **Micro:** pool all the counts first. For normal single-label problems this equals accuracy.
 
 ## Check yourself
 
-1. Why is the best grid-search CV score insufficient as an independent final estimate?
-2. When should you use group-aware or time-aware splitting?
-3. What does nested CV assess, and how do you obtain the final model afterward?
-4. Why might MAE and RMSE choose different models?
-5. Why can always predicting “win” give a deceptively high F1?
-6. Why can Youden's J and maximum F1 select different thresholds?
-7. When is macro F1 more informative than weighted F1?
+1. Why isn't the best grid-search score an honest final estimate?
+2. When would you use GroupKFold or TimeSeriesSplit instead of normal K-fold?
+3. What does nested CV estimate, and how do you get the final model?
+4. Why can MAE and RMSE prefer different models?
+5. Why can "always predict win" get a decent F1?
+6. What happens to precision and recall when you lower the threshold?

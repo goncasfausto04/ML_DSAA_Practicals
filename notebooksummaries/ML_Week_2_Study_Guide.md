@@ -1,55 +1,67 @@
-# Machine Learning — Week 2: The ML Pipeline
+# Week 2 — The ML Pipeline from Start to Finish
 
-Source: [ML pipeline solution](../solutions/week_02/week_02_ml_pipeline_solution.ipynb).
+Source: [week 2 solution](../solutions/week_02/week_02_ml_pipeline_solution.ipynb)
 
-## Key learning points
+## The big idea
 
-1. Follow the workflow: **business need → data → exploration → preparation → modelling → tuning → assessment → deployment**.
-2. Split before fitting. Learn transformations and model parameters from training rows only.
-3. Choose model settings using validation performance, then assess the final choice on an untouched test set.
-4. Match the metric and prediction format to the decision being made.
+An ML project is **a pipeline of stages**, and fitting the model is only one of them, usually not the one that decides whether the project is useful:
 
-## Training, validation, and complexity
+**business need → get data → explore → prepare → model → tune → assess → deploy**
 
-| Term | Meaning |
+Every choice you make along the way (how you fill gaps, which columns you drop) is a decision you should be able to explain afterwards.
+
+## Why we split the data
+
+The goal is a model that works on **new** data, not one that memorises the old data. So we hide part of the data from the model and use it to check how well it does.
+
+| Set | Used for |
 |---|---|
-| Training set | Fits preprocessing and model parameters |
-| Validation set | Compares models and hyperparameters |
-| Test set | Assesses the final choice independently |
-| Parameter | Learned during fitting, such as a tree's split threshold |
-| Hyperparameter | Chosen setting, such as `max_depth` |
-| Stratification | Preserves class proportions across splits |
-| `random_state` | Makes random operations reproducible |
+| **Training** | The model learns from it |
+| **Validation** | Comparing settings and models to pick the best one |
+| **Test** | One final, honest check of the chosen model. **Never** used to make choices |
 
-The notebook uses a **70/30 training/validation split** with stratification. Once used for tuning, validation is no longer an independent final assessment.
+Why keep the test set separate? Once you use a set to *choose* something, its score becomes too optimistic, because you picked whatever happened to do best on it. The test set stays clean so it can give an honest number.
 
-A **decision tree** learns branching if/then rules. Deep trees can **overfit**: excellent training performance but worse validation performance. Trees that are too shallow can **underfit**, missing useful patterns on both sets. The notebook's perfect training score did not imply perfect generalization; limiting depth improved validation F1.
+**Stratification:** when splitting, keep the same proportion of each class in every part (for example, 60% winners in both train and validation).
 
-## Classification metrics
+**`random_state`:** fixes the randomness so you get the same split every time you run the code (reproducible).
 
-| | Predicted negative | Predicted positive |
-|---|---:|---:|
-| Actual negative | TN | FP |
-| Actual positive | FN | TP |
+## Parameters vs hyperparameters
 
-- **Accuracy:** `(TP + TN) / N` — fraction correct.
-- **Precision:** `TP / (TP + FP)` — how many flagged cases are truly positive?
-- **Recall:** `TP / (TP + FN)` — how many actual positives are found?
-- **F1:** `2PR / (P + R)` — harmonic mean of precision and recall; does not directly represent business costs.
+- **Parameters** are what the model *learns* from data (for example, the threshold a tree splits on).
+- **Hyperparameters** are settings *you choose* before training (for example, the maximum depth of a tree).
 
-For inspections, FP wastes a visit and FN misses a drug plantation. Choose priorities from those consequences.
+## Overfitting and underfitting
 
-## From fitting to use
+- **Overfitting:** the model memorises the training data, including its noise. You see a **great training score and a worse validation score**. Example: a very deep decision tree.
+- **Underfitting:** the model is too simple to capture the pattern. The score is **bad on both** training and validation. Example: a tree with only one question.
+- The sweet spot is in between, and **we find it using validation scores, never training scores.** If you tuned on training accuracy you would always pick the most complex model.
 
-- `.fit(X_train, y_train)` learns; `.predict(X_val)` returns class labels.
-- `.predict_proba(X)` returns estimated class probabilities. Rank the positive-class probabilities when inspection capacity is limited.
-- Probability estimates need calibration checks before being interpreted as reliable probabilities.
-- A classifier's `.score()` commonly returns accuracy; request F1 explicitly when needed.
-- Save preprocessing together with the model so new data receives the same treatment.
+## Metrics: the confusion matrix
+
+| | Predicted NO | Predicted YES |
+|---|---|---|
+| **Actually NO** | TN (true negative) | FP (false alarm) |
+| **Actually YES** | FN (missed it) | TP (true positive) |
+
+- **Accuracy:** share of all predictions that are right.
+- **Precision:** of the ones I flagged YES, how many really were YES? (Am I wasting inspections?)
+- **Recall:** of all the real YES cases, how many did I catch? (Am I missing criminals?)
+- **F1:** a single number that balances precision and recall.
+
+The same model can score 0.88 accuracy and 0.78 F1. **The metric you pick decides what "good" means**, so pick it based on which mistake costs more.
+
+## Probabilities, not just labels
+
+A classifier can give a **probability** (`predict_proba`) instead of just YES/NO. That's useful when you can only act on a limited number of cases: rank them by probability and inspect the top ones first.
+
+## Deployment
+
+Deployment means **using the model on new, unlabelled data**. You save the model *together with its preprocessing* to disk (with `joblib`), so next month's data gets treated exactly the same way.
 
 ## Check yourself
 
-1. How do parameters differ from hyperparameters?
-2. What does a large training–validation gap suggest?
-3. Why use probabilities to prioritize inspections?
-4. Why must a test set remain untouched during tuning?
+1. Why must the test set stay untouched while you tune?
+2. What does "great on training, worse on validation" tell you?
+3. What's the difference between precision and recall, in plain words?
+4. Why save the preprocessing together with the model?

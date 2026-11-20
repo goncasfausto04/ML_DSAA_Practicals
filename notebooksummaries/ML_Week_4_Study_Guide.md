@@ -1,61 +1,59 @@
-# Machine Learning — Week 4: Feature Engineering and Selection
+# Week 4 — Feature Engineering and Feature Selection
 
-Sources: [Classification solution](../solutions/week_04/week_04_feature_work_classification_solution.ipynb) · [Regression solution](../solutions/week_04/week_04_feature_work_regression_solution.ipynb).
+Sources: [classification solution](../solutions/week_04/week_04_feature_work_classification_solution.ipynb) · [regression solution](../solutions/week_04/week_04_feature_work_regression_solution.ipynb)
 
-## Key learning points
+## The big idea
 
-- **Engineering** creates or transforms features; **selection** keeps existing columns; **reduction** replaces them with fewer derived components.
-- Fit encoders, scalers, dimensionality reduction, and selectors inside each training fold.
-- More features or more complicated transformations do not automatically improve prediction.
-- Judge changes by held-out performance, uncertainty, interpretability, and computational cost.
+Before modelling, you shape the columns the model will see. There are three different moves:
 
-## Encoding and scaling
+- **Engineering:** create or transform features (for example, `km_per_year = mileage / age`).
+- **Selection:** keep some of the existing columns and drop the rest.
+- **Reduction:** replace many columns with a few new combined ones (PCA).
 
-| Method | What to remember |
-|---|---|
-| One-hot encoding | One indicator per category; avoids inventing order but can create many columns |
-| Ordinal encoding | Numeric ranks; appropriate when categories have a real order |
-| Count/frequency encoding | Uses training category frequencies; compact but loses category identity |
-| Target encoding | Uses target statistics; especially vulnerable to leakage and needs careful out-of-fold handling |
-| Scaling | Puts numeric features on comparable scales; important for distances and coefficient penalties |
+More features, or fancier features, don't automatically help. Every change has to prove itself on held-out data.
 
-Handle unseen categories consistently. A basic decision tree generally does not need scaling.
+## Encoding: turning categories into numbers
 
-## Engineering versus reduction
+Models need numbers, so categories must be converted:
 
-Create candidate features **before** selection. The regression notebook adds usage intensity (`km_per_year`); logging this feature worsened MAE and made it nearly redundant with logged mileage. **A transform that helps one feature may hurt another.**
+| Method | How it works | When |
+|---|---|---|
+| **One-hot** | One 0/1 column per category | Categories with no order (colour, brand) |
+| **Ordinal** | Categories become ranks 1, 2, 3… | Categories with a real order (small < medium < large) |
+| **Frequency** | Replace a category by how often it appears | Compact, but loses which category it was |
+| **Target encoding** | Replace a category by the average target for it | Powerful but **leaks easily**; handle with care |
 
-**PCA** creates components that preserve input variance, not necessarily predictive signal. **TruncatedSVD** supports compression without centering and is useful for sparse inputs. In both notebooks, retaining 80% of variance with PCA worsened prediction. Explained variance is not predictive value.
+## Scaling
 
-## Three selection families
+Scaling puts numeric columns on a similar range. It matters for anything based on **distances** (KNN) or **penalties on coefficients** (regularised regression). Without it, a column measured in big units dominates just because of its units. Decision trees don't need scaling.
 
-| Family | Mechanism | Examples | Main limitation |
-|---|---|---|---|
-| Filter | Scores variation or association | VarianceThreshold, correlation, chi-square, ANOVA | Often misses joint usefulness and interactions |
-| Wrapper | Repeatedly fits models on subsets | RFE, RFECV, sequential selection | Computationally expensive |
-| Embedded | Selects during model fitting | L1/Lasso, tree importance | Depends on the fitted model and selection rule |
+## PCA: keeps variance, not signal
 
-- **Relevance:** relation to the target. **Redundancy:** repetition of another feature's information.
-- **RFE** repeatedly removes weak features; **RFECV** uses internal CV to choose the count.
-- **L1** can shrink coefficients to zero; **L2/Ridge** shrinks coefficients without generally removing them. For logistic regression, smaller `C` means stronger regularization.
-- Match association tests to variable types. Statistical significance (a p-value) is not effect size.
+PCA builds new columns that keep as much **spread (variance)** of the data as possible. But it **never looks at the target**, so the spread it keeps may not be what predicts the outcome. In both notebooks, keeping 80% of the variance made predictions **worse**. Lesson: "explains most of the variance" ≠ "useful for prediction".
 
-## Combining selectors
+## Three families of feature selection
 
-- **Sequence/funnel:** apply selectors in order; early exclusions cannot be recovered.
-- **Vote:** run selectors on the full training representation and retain columns supported by enough selectors.
+| Family | How it works | Weakness |
+|---|---|---|
+| **Filter** | Score each feature alone (correlation, variance, statistical test) | Looks at one feature at a time, so it misses features that only help together, and can't see when two features repeat each other |
+| **Wrapper** | Try subsets by actually training models (RFE removes the weakest feature repeatedly) | Slow, many fits |
+| **Embedded** | Selection happens during training (Lasso/L1 sets weak coefficients to zero; tree importances) | Depends on that one model |
 
-The notebooks' vote combined filter, wrapper, and embedded methods. Classification became smaller with essentially tied F1; regression saw a small MAE improvement. The sequence performed worse. **Learn the trade-off, not “voting always wins”.**
+Two separate ideas:
+- **Relevance:** is the feature related to the target?
+- **Redundancy:** does it just repeat information another feature already has?
 
-## Evaluating changes
+## Combining selectors: voting
 
-Both notebooks use **20 paired 80/20 splits**. Positive F1 differences and negative MAE differences indicate improvement. Their rule of roughly two SEMs is a practical uncertainty heuristic, not a universal statistical guarantee. A statistically detectable gain may still be too small to matter in practice.
+Instead of trusting one method, run several and **keep the features that most of them agree on**. This depends less on the quirks of any single method. A "funnel" (one selector after another) is riskier: if an early step drops a feature by mistake, you can't get it back.
 
-Selecting features or methods using validation scores makes the winning score optimistic; use an independent test or nested validation for final assessment.
+## Fit everything inside the training split
+
+Selection looks at the target. If you select features on the full data and then test, the test rows already influenced which features were chosen, and that's **leakage**. So, like cleaning, what you save is the **strategy** ("vote of these three selectors"), and it gets re-run inside each training split.
 
 ## Check yourself
 
-1. How do engineering, selection, and reduction differ?
-2. Why can PCA preserve most variance but worsen predictions?
-3. What separates filters, wrappers, and embedded methods?
-4. Why can fewer features be useful even when F1 barely changes?
+1. What's the difference between engineering, selection and reduction?
+2. Why can PCA keep 80% of the variance and still hurt predictions?
+3. Why might a filter method miss a useful feature?
+4. Why save the selection *strategy* and not the list of chosen columns?

@@ -1,60 +1,58 @@
-# Machine Learning — Week 3: Exploration, Data Quality, and Cleaning
+# Week 3 — Exploring and Cleaning Data
 
-Sources: [Classification solution](../solutions/week_03/week_03_deepen_exploration_solution.ipynb) · [Regression solution](../solutions/week_03/week_03_deepen_exploration_regression_solution.ipynb).
+Sources: [classification solution](../solutions/week_03/week_03_deepen_exploration_solution.ipynb) · [regression solution](../solutions/week_03/week_03_deepen_exploration_regression_solution.ipynb)
 
-## Key learning points
+## The big idea
 
-- Understand each column's meaning: identifier, measurement, count, nominal category, ordered category, or boolean. Storage dtype alone is insufficient.
-- Separate **missing**, **invalid**, **unusually extreme**, and **repeated** observations. They require different decisions.
-- Use domain knowledge before automatic cleaning rules. A rare or extreme value can be valid.
-- Compare cleaning strategies on the same held-out splits, fitting learned values only on training rows.
-- Preserve a reproducible cleaning **recipe**, then refit its learned values in every training fold.
+A raw file is not a dataset yet. **You** turn it into one through cleaning decisions, and those decisions affect the results as much as the model does. Good cleaning comes from **understanding what each column means**, not from applying automatic rules.
 
-## Outliers and transformations
+## Four different problems, four different fixes
 
-- `IQR = Q3 - Q1`; boxplots flag values outside `Q1 - 1.5 × IQR` and `Q3 + 1.5 × IQR`.
-- These are investigation flags, not automatic deletion rules. If `IQR = 0`, even valid nonzero values may be flagged.
-- `log1p(x) = ln(1 + x)` compresses non-negative, right-skewed features and handles zero. Validate whether it helps prediction.
-- Repeated entities can leak across splits even when their rows are not identical; `drop_duplicates()` alone may miss this.
+Don't lump these together:
 
-## Missing values
+| Problem | What it is | Example |
+|---|---|---|
+| **Missing** | No value recorded | Empty cell |
+| **Invalid** | A value that *can't* be true | Age = 0, a misspelt category, a placeholder like 999 |
+| **Extreme (outlier)** | Unusual but possibly **real** | A very expensive car, an athlete who trains a lot |
+| **Repeated** | Same entity appears more than once | One athlete with several rows |
 
-| Strategy | Key idea or limitation |
+Find the invalid values **first**. They often need to become "missing" before you count what's missing.
+
+## Outliers: investigate, don't auto-delete
+
+- The **IQR rule** (boxplot) flags values far from the middle 50% of the data. It's a *screening tool* ("look at these"), **not a deletion rule**.
+- Auto-deleting outliers can throw away real, important cases. In the cars data the rule would have deleted about 30% of the file, including the whole cheap end of the market, and the "weird" mpg values turned out to be hybrids.
+- **A better option:** `log1p` (log of 1 + x). It squashes long tails so extreme values matter less, **without removing any rows**.
+
+## Missing values: filling them in (imputation)
+
+| Method | Idea |
 |---|---|
-| Median / mode | Simple numeric / categorical filling using training statistics |
-| Explicit missing category | Retains the fact that a category was not recorded |
-| KNN imputation | Uses similar training cases; sensitive to distance and scaling |
-| Iterative imputation | Predicts missing values from other columns; complexity does not guarantee improvement |
+| Median / most common value | Simple and often good enough |
+| "Missing" as its own category | Keeps the information that the value wasn't recorded |
+| KNN imputation | Copy from similar rows |
+| Iterative imputation | Predict the missing value from the other columns |
 
-**Fit on training, transform held-out data.** Never carry a median learned from the full dataset into evaluation folds.
+Fancier isn't automatically better. On the athletes the simple median won; on the cars KNN won. **Same technique, different result on different data.** You have to test.
 
-## Classification notebook: athletes
+## The golden rule: learn only from training rows
 
-- Repair category typos and interpret placeholder or administrative codes using domain meaning.
-- Keep one record per athlete to prevent repeated-athlete leakage; the earliest `RecordID` is the chosen reproducible tie-break.
-- Retain valid high-training athletes rather than deleting every IQR outlier.
-- The selected recipe uses training-fold median/mode imputation and `log1p` on training-volume features.
-- **Lesson:** straightforward cleaning can beat unnecessary complexity while preserving valid observations.
+Any value you *compute* while cleaning (a median, the neighbours used by KNN) must be computed **from the training rows only**, then applied to validation/test rows. If you compute the median on the whole file, information from the test rows leaks into training and your score is too optimistic.
 
-## Regression notebook: car prices
+So what you save is the **recipe** ("fill with the training median"), not the fixed number.
 
-- Check plausibility and category spelling; remove records judged untrustworthy by domain rules.
-- Drop the high-cardinality `model` feature while keeping `Brand`.
-- The selected recipe uses numeric KNN imputation (`k=5`), a missing category, and `log1p` on `mpg` and `mileage`.
-- Keep the target in euros for euro MAE. Training or evaluating in log-price space changes what errors mean.
-- **Lesson:** different datasets can justify different cleaning recipes; a small score gain need not outweigh invalid data.
+## Repeated entities cause leakage
 
-## Comparing cleaning choices
+If the same athlete appears in both training and test, the model is partly tested on someone it has already seen. `drop_duplicates()` only catches *identical* rows, so you need to think about repeated **entities**, not just repeated rows.
 
-Both notebooks use **20 repeated 80/20 splits**, comparing candidates on matching splits. **MAE** is average absolute error; **RMSE** penalizes large errors more strongly. Lower is better for both.
+## How we compare cleaning choices
 
-Compare the mean paired score difference with its **SEM** (standard error of the mean). Small changes relative to uncertainty give weak evidence. Reusing these scores to choose a strategy means they are selection evidence, rather than an untouched final test.
-
-`CleaningLog` records the actions and reasons; the notebook performs the cleaning. Save “use a training median”, rather than a fixed full-dataset median.
+Try each strategy on **the same set of repeated random splits** (20 here) and compare the average difference. A difference only means something if it's large compared to its uncertainty (the standard error, SEM). One split alone can't tell a real gain from luck.
 
 ## Check yourself
 
-1. How does an invalid value differ from a valid outlier?
-2. How can repeated entities cause leakage?
-3. Why must imputation be refitted inside each training fold?
-4. Why might athletes and cars need different cleaning strategies?
+1. How is an invalid value different from a real outlier?
+2. Why is the IQR rule a screening tool and not a deletion rule?
+3. Why must the median be computed on training rows only?
+4. Why might the athletes and the cars end up with different cleaning recipes?
